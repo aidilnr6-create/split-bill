@@ -1,0 +1,199 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Split Bill Cepat</title>
+    <style>
+        body { font-family: sans-serif; background-color: #f4f4f9; margin: 0; padding: 20px; }
+        .container { max-width: 400px; margin: 0 auto; background: white; padding: 20px; border-radius: 15px; box-shadow: 0 4px 10px rgba(0,0,0,0.1); }
+        h2 { text-align: center; color: #333; margin-top: 0; }
+        
+        /* Area Input Harga */
+        .input-row { display: flex; align-items: center; margin-bottom: 10px; gap: 10px; }
+        .item-number { width: 25px; font-weight: bold; color: #888; flex-shrink: 0; }
+        .price-input { 
+            flex-grow: 1; padding: 10px; border: 1px solid #ddd; border-radius: 8px; font-size: 16px; 
+            background-color: #fff; transition: 0.2s;
+        }
+        .price-input:focus { outline: none; border-color: #007bff; background-color: #f0f8ff; }
+        
+        /* Hasil Per Item (Muncul disebelah input) */
+        .result-span { 
+            font-weight: bold; color: #28a745; min-width: 90px; text-align: right; 
+            font-size: 15px; display: none; /* Sembunyi dulu */
+        }
+
+        /* Tombol */
+        .btn-add { background: #eee; color: #333; border: 2px dashed #ccc; width: 100%; padding: 10px; border-radius: 8px; font-weight: bold; cursor: pointer; margin-bottom: 20px; }
+        .btn-add:hover { background: #e0e0e0; border-color: #999; }
+        
+        /* Area Diskon */
+        .discount-section { background: #f8f9fa; padding: 15px; border-radius: 10px; border: 1px solid #eee; margin-bottom: 20px; }
+        .discount-controls { display: flex; gap: 10px; margin-top: 5px; }
+        .discount-type { padding: 10px; border-radius: 8px; border: 1px solid #ddd; background: white; }
+        
+        .summary { font-size: 14px; color: #555; margin-top: 10px; line-height: 1.6; }
+        .summary strong { color: #000; font-size: 16px; }
+
+        .btn-calc { background: #007bff; color: white; border: none; width: 100%; padding: 15px; border-radius: 10px; font-size: 18px; font-weight: bold; cursor: pointer; box-shadow: 0 4px 6px rgba(0,123,255,0.2); }
+        .btn-calc:active { transform: scale(0.98); }
+        
+        .btn-reset { background: none; border: none; color: #dc3545; width: 100%; margin-top: 15px; cursor: pointer; text-decoration: underline; }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <h2>⚡ Split Bill Cepat</h2>
+
+    <div id="inputContainer">
+        </div>
+
+    <button class="btn-add" onclick="addInputRow()">+ Tambah Baris Harga</button>
+
+    <div class="discount-section">
+        <label style="font-weight:bold; font-size:14px;">Atur Diskon / Pajak</label>
+        <div class="discount-controls">
+            <select id="discountType" class="discount-type" onchange="toggleDiscountPlaceholder()">
+                <option value="percent">Diskon (%)</option>
+                <option value="nominal">Potongan (Rp)</option>
+                <option value="tax">Pajak/Service (+%)</option>
+            </select>
+            <input type="number" id="discountValue" class="price-input" placeholder="Contoh: 50" style="margin:0;">
+        </div>
+        
+        <div class="summary">
+            <div>Total Asli: <span id="displaySubtotal" style="float:right">Rp0</span></div>
+            <div>Total Akhir: <span id="displayTotalFinal" style="float:right; font-weight:bold; color:#007bff">Rp0</span></div>
+        </div>
+    </div>
+
+    <button class="btn-calc" onclick="calculate()">HITUNG SEKARANG</button>
+    <button class="btn-reset" onclick="resetAll()">Ulangi dari Nol</button>
+</div>
+
+<script>
+    // Saat halaman dimuat, langsung buat 3 baris input biar cepat
+    window.onload = function() {
+        addInputRow();
+        addInputRow();
+        addInputRow();
+    };
+
+    function addInputRow() {
+        const container = document.getElementById('inputContainer');
+        const index = container.children.length + 1;
+        
+        const div = document.createElement('div');
+        div.className = 'input-row';
+        div.innerHTML = `
+            <div class="item-number">#${index}</div>
+            <input type="number" class="price-input item-price" placeholder="Harga item" onkeydown="handleEnter(event)">
+            <span class="result-span">Rp0</span>
+        `;
+        container.appendChild(div);
+        
+        // Auto focus ke input baru (opsional, kalau mau ngetik cepat)
+        // div.querySelector('input').focus(); 
+    }
+
+    // Biar kalau tekan Enter langsung nambah baris baru
+    function handleEnter(e) {
+        if(e.key === "Enter") {
+            addInputRow();
+            // Pindahkan fokus ke elemen terakhir yang baru dibuat
+            setTimeout(() => {
+                const inputs = document.querySelectorAll('.item-price');
+                inputs[inputs.length - 1].focus();
+            }, 50);
+        }
+    }
+
+    function toggleDiscountPlaceholder() {
+        const type = document.getElementById('discountType').value;
+        const input = document.getElementById('discountValue');
+        if (type === 'percent' || type === 'tax') {
+            input.placeholder = "Contoh: 10, 50, dll";
+        } else {
+            input.placeholder = "Contoh: 20000";
+        }
+    }
+
+    function calculate() {
+        // 1. Ambil semua input harga
+        const priceInputs = document.querySelectorAll('.item-price');
+        const resultSpans = document.querySelectorAll('.result-span');
+        
+        let subtotal = 0;
+        let items = [];
+
+        // Hitung Total Asli (Subtotal)
+        priceInputs.forEach((input, index) => {
+            const val = parseFloat(input.value);
+            if (!isNaN(val) && val > 0) {
+                subtotal += val;
+                items.push({ index: index, original: val });
+            } else {
+                // Kalau kosong/0, sembunyikan hasil
+                resultSpans[index].style.display = 'none';
+            }
+        });
+
+        if (subtotal === 0) {
+            alert("Masukkan minimal satu harga!");
+            return;
+        }
+
+        // 2. Hitung Diskon / Pajak
+        const discType = document.getElementById('discountType').value;
+        const discVal = parseFloat(document.getElementById('discountValue').value) || 0;
+        
+        let finalTotal = subtotal;
+
+        if (discType === 'percent') {
+            // Diskon Persen (Total - X%)
+            finalTotal = subtotal - (subtotal * (discVal / 100));
+        } else if (discType === 'nominal') {
+            // Diskon Rupiah (Total - RpX)
+            finalTotal = subtotal - discVal;
+        } else if (discType === 'tax') {
+            // Pajak/Service (Total + X%)
+            finalTotal = subtotal + (subtotal * (discVal / 100));
+        }
+
+        // Jangan sampai minus
+        if (finalTotal < 0) finalTotal = 0;
+
+        // 3. Hitung Rasio
+        const ratio = finalTotal / subtotal;
+
+        // 4. Tampilkan Hasil
+        document.getElementById('displaySubtotal').innerText = "Rp" + subtotal.toLocaleString();
+        document.getElementById('displayTotalFinal').innerText = "Rp" + finalTotal.toLocaleString();
+
+        items.forEach(item => {
+            const finalPrice = item.original * ratio;
+            // Pembulatan ke 100 perak terdekat
+            const rounded = Math.round(finalPrice / 100) * 100;
+            
+            const span = resultSpans[item.index];
+            span.style.display = 'block';
+            span.innerText = "Rp" + rounded.toLocaleString();
+        });
+    }
+
+    function resetAll() {
+        document.getElementById('inputContainer').innerHTML = "";
+        document.getElementById('discountValue').value = "";
+        document.getElementById('displaySubtotal').innerText = "Rp0";
+        document.getElementById('displayTotalFinal').innerText = "Rp0";
+        // Buat 3 baris baru lagi
+        addInputRow();
+        addInputRow();
+        addInputRow();
+    }
+</script>
+
+</body>
+</html>
